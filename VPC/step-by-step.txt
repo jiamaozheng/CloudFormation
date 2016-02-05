@@ -1,0 +1,39 @@
+
+1. create an EIP
+2. create an ENI - give the ENI a distinct description, you'll use this later...
+3. associate the EIP to the ENI
+4. disable src/dst checking on ENI
+5. set the default route for the associated private routing table to point at the ENI
+6. create an IAM Role for HA-NAT
+7. create the IAM Policy for HA-NAT
+{
+    "Version": "2012-10-17",
+    "Statement": {
+        "Effect": "Allow",
+        "Action": [
+            "ec2:AttachNetworkInterface",
+            "ec2:DescribeNetworkInterfaces",
+        ],
+        "Resource": [
+            "*"
+        ]
+    }
+}
+8. associate the policy to the Role
+9. create an AutoScaling Launch Config that uses the following UserData as text passed to the instance launching
+
+#!/bin/bash
+ my_eni_id=$(/usr/bin/aws ec2 describe-network-interfaces  --region us-east-1 --filters Name='description',Values='<distinct description here>' --query 'NetworkInterfaces[*].{ID:NetworkInterfaceId}' --output text)
+ my_instance_id=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+ /usr/bin/aws ec2 attach-network-interface --network-interface-id ${my_eni_id} --instance-id ${my_instance_id} --device-index 1 --region 'us-east-1'
+ /bin/sleep 60
+ /sbin/ifdown eth0
+ /sbin/iptables -t nat -A POSTROUTING -j MASQUERADE
+ /sbin/iptables -A FORWARD -j ACCEPT
+ /sbin/sysctl -w "net.ipv4.ip_forward=1"
+
+10. create autoscaling group
+
+that's it.
+
+
